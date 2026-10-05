@@ -1,0 +1,30 @@
+<policies>
+  <inbound>
+    <base />
+    <!-- Bounded spectra reads: exactly one scene per request, conjunctive filters only. -->
+    <choose>
+      <when condition="@{
+          var filter = System.Net.WebUtility.UrlDecode(context.Request.Url.Query.GetValueOrDefault(&quot;$filter&quot;, &quot;&quot;));
+          return !Regex.IsMatch(filter, @&quot;^\s*scene_id eq '[A-Z]-\d{4}'(\s+and\s+.+)?\s*$&quot;)
+              || Regex.IsMatch(filter, @&quot;\bor\b&quot;, RegexOptions.IgnoreCase);
+        }">
+        <return-response>
+          <set-status code="400" reason="Bad Request" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/json</value>
+          </set-header>
+          <set-body>{"error":"Spectra reads must start with $filter=scene_id eq '&lt;id&gt;' and may add 'and' clauses; 'or' is not supported."}</set-body>
+        </return-response>
+      </when>
+    </choose>
+  </inbound>
+  <backend>
+    <base />
+  </backend>
+  <outbound>
+    <base />
+  </outbound>
+  <on-error>
+    <base />
+  </on-error>
+</policies>

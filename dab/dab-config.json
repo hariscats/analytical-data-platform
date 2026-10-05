@@ -1,0 +1,202 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Azure/data-api-builder/v2.0.12/schemas/dab.draft.schema.json",
+  "data-source": {
+    "database-type": "postgresql",
+    "connection-string": "@env('DATABASE_CONNECTION_STRING')",
+    "health": {
+      "enabled": true,
+      "name": "imagery",
+      "threshold-ms": 1000
+    }
+  },
+  "runtime": {
+    "rest": {
+      "enabled": true,
+      "path": "/api",
+      "request-body-strict": true
+    },
+    "graphql": {
+      "enabled": false
+    },
+    "mcp": {
+      "enabled": false
+    },
+    "pagination": {
+      "default-page-size": 100,
+      "max-page-size": 500,
+      "next-link-relative": true
+    },
+    "cache": {
+      "enabled": false
+    },
+    "health": {
+      "enabled": true,
+      "roles": [
+        "mission-a-analyst",
+        "mission-b-analyst",
+        "catalog-viewer"
+      ],
+      "cache-ttl-seconds": 5,
+      "max-query-parallelism": 1
+    },
+    "host": {
+      "mode": "production",
+      "max-response-size-mb": null,
+      "cors": {
+        "origins": [],
+        "allow-credentials": false
+      },
+      "authentication": {
+        "provider": "EntraID",
+        "jwt": {
+          "audience": "@env('API_AUDIENCE')",
+          "issuer": "@env('DAB_JWT_ISSUER')"
+        }
+      }
+    }
+  },
+  "entities": {
+    "Scene": {
+      "description": "Grain: one row per hyperspectral scene acquisition.",
+      "source": {
+        "type": "view",
+        "object": "api.scenes_v1"
+      },
+      "rest": {
+        "enabled": true,
+        "path": "/scenes"
+      },
+      "graphql": {
+        "enabled": false
+      },
+      "fields": [
+        { "name": "scene_id", "primary-key": true, "description": "Scene identifier, for example A-0002." },
+        { "name": "mission_id", "description": "Owning mission; the row entitlement key." },
+        { "name": "sensor", "description": "Synthetic sensor name." },
+        { "name": "acquired_at", "description": "Acquisition time (UTC)." },
+        { "name": "center_lat", "description": "Scene centre latitude (degrees)." },
+        { "name": "center_lon", "description": "Scene centre longitude (degrees)." },
+        { "name": "cloud_cover_pct", "description": "Estimated cloud cover (percent)." },
+        { "name": "gsd_m", "description": "Ground sample distance (metres)." },
+        { "name": "width_px", "description": "Pixel columns." },
+        { "name": "height_px", "description": "Pixel rows." },
+        { "name": "band_count", "description": "Spectral bands per pixel." }
+      ],
+      "permissions": [
+        {
+          "role": "mission-a-analyst",
+          "actions": [
+            {
+              "action": "read",
+              "fields": {
+                "include": [
+                  "scene_id", "mission_id", "sensor", "acquired_at", "center_lat", "center_lon",
+                  "cloud_cover_pct", "gsd_m", "width_px", "height_px", "band_count"
+                ],
+                "exclude": []
+              },
+              "policy": {
+                "database": "@item.mission_id eq 'A'"
+              }
+            }
+          ]
+        },
+        {
+          "role": "mission-b-analyst",
+          "actions": [
+            {
+              "action": "read",
+              "fields": {
+                "include": [
+                  "scene_id", "mission_id", "sensor", "acquired_at", "center_lat", "center_lon",
+                  "cloud_cover_pct", "gsd_m", "width_px", "height_px", "band_count"
+                ],
+                "exclude": []
+              },
+              "policy": {
+                "database": "@item.mission_id eq 'B'"
+              }
+            }
+          ]
+        },
+        {
+          "role": "catalog-viewer",
+          "actions": [
+            {
+              "action": "read",
+              "fields": {
+                "include": [
+                  "scene_id", "mission_id", "sensor", "acquired_at",
+                  "cloud_cover_pct", "gsd_m", "width_px", "height_px", "band_count"
+                ],
+                "exclude": []
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "Spectrum": {
+      "description": "Grain: one reflectance sample per scene, pixel, and band.",
+      "source": {
+        "type": "view",
+        "object": "api.spectra_v1"
+      },
+      "rest": {
+        "enabled": true,
+        "path": "/spectra"
+      },
+      "graphql": {
+        "enabled": false
+      },
+      "fields": [
+        { "name": "scene_id", "primary-key": true, "description": "Scene identifier." },
+        { "name": "pixel_row", "primary-key": true, "description": "Zero-based pixel row." },
+        { "name": "pixel_col", "primary-key": true, "description": "Zero-based pixel column." },
+        { "name": "band_id", "primary-key": true, "description": "One-based band number." },
+        { "name": "mission_id", "description": "Owning mission; the row entitlement key." },
+        { "name": "wavelength_nm", "description": "Band centre wavelength (nanometres)." },
+        { "name": "reflectance", "description": "Surface reflectance, 0 to 1." },
+        { "name": "quality_flag", "description": "1 inside atmospheric water-absorption bands, else 0." }
+      ],
+      "permissions": [
+        {
+          "role": "mission-a-analyst",
+          "actions": [
+            {
+              "action": "read",
+              "fields": {
+                "include": [
+                  "scene_id", "mission_id", "pixel_row", "pixel_col", "band_id",
+                  "wavelength_nm", "reflectance", "quality_flag"
+                ],
+                "exclude": []
+              },
+              "policy": {
+                "database": "@item.mission_id eq 'A'"
+              }
+            }
+          ]
+        },
+        {
+          "role": "mission-b-analyst",
+          "actions": [
+            {
+              "action": "read",
+              "fields": {
+                "include": [
+                  "scene_id", "mission_id", "pixel_row", "pixel_col", "band_id",
+                  "wavelength_nm", "reflectance", "quality_flag"
+                ],
+                "exclude": []
+              },
+              "policy": {
+                "database": "@item.mission_id eq 'B'"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

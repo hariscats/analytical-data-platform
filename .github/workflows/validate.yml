@@ -1,0 +1,50 @@
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.1
+          terraform_wrapper: false
+      - name: Terraform format
+        run: terraform -chdir=infra fmt -check -recursive
+      - name: Terraform validate
+        run: |
+          terraform -chdir=infra init -backend=false -input=false
+          terraform -chdir=infra validate
+      - name: DAB configuration is valid JSON
+        run: jq empty dab/dab-config.json
+      - name: Shell scripts
+        run: shellcheck -x -P scripts scripts/*.sh
+      - name: PowerShell scripts
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          # Write-Host is intended: these scripts narrate a live demo.
+          $results = Invoke-ScriptAnalyzer -Path scripts -ExcludeRule PSAvoidUsingWriteHost
+          $results
+          if ($results) { exit 1 }
+
+  database-and-dab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Database floor and DAB startup against the published views (bash)
+        run: bash scripts/test-local.sh
+      - name: Database floor and DAB startup against the published views (PowerShell)
+        shell: pwsh
+        run: ./scripts/test-local.ps1

@@ -1,0 +1,23 @@
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+.local/
+*.local
+.DS_Store
+Thumbs.db
+
+# Terraform: local state holds demo client secrets
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+crash.log
+
+# Local tooling output from earlier lab iterations
+.azure/
+.copilot-azure/

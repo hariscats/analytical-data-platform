@@ -1,0 +1,78 @@
+<policies>
+  <inbound>
+    <base />
+    <!-- 1. Caller: a v2 Microsoft Entra token for this API that carries one of its app roles. -->
+    <validate-azure-ad-token tenant-id="${tenant_id}"
+                             header-name="Authorization"
+                             failed-validation-httpcode="401"
+                             failed-validation-error-message="A valid Microsoft Entra access token for this API is required."
+                             output-token-variable-name="token">
+      <audiences>
+        <audience>${audience}</audience>
+      </audiences>
+      <required-claims>
+        <claim name="roles" match="any">
+%{ for role in roles ~}
+          <value>${role}</value>
+%{ endfor ~}
+        </claim>
+      </required-claims>
+    </validate-azure-ad-token>
+    <!-- 2. Role selection: DAB authorizes by X-MS-API-ROLE, so it must be one of the caller's own roles. -->
+    <choose>
+      <when condition="@(!((Jwt)context.Variables[&quot;token&quot;]).Claims.GetValueOrDefault(&quot;roles&quot;, &quot;&quot;).Split(',').Contains(context.Request.Headers.GetValueOrDefault(&quot;X-MS-API-ROLE&quot;, &quot;&quot;)))">
+        <return-response>
+          <set-status code="403" reason="Forbidden" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/json</value>
+          </set-header>
+          <set-body>{"error":"Send X-MS-API-ROLE with one of the app roles in your token."}</set-body>
+        </return-response>
+      </when>
+    </choose>
+    <!-- 3. Supported query shape: DAB's OData keywords only, with a bounded page size. -->
+    <choose>
+      <when condition="@(context.Request.Url.Query.Keys.Any(k => !new[] { &quot;$select&quot;, &quot;$filter&quot;, &quot;$orderby&quot;, &quot;$first&quot;, &quot;$after&quot; }.Contains(k)))">
+        <return-response>
+          <set-status code="400" reason="Bad Request" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/json</value>
+          </set-header>
+          <set-body>{"error":"Supported query parameters: $select, $filter, $orderby, $first, $after."}</set-body>
+        </return-response>
+      </when>
+      <when condition="@{
+          var first = context.Request.Url.Query.GetValueOrDefault(&quot;$first&quot;, &quot;100&quot;);
+          int size;
+          return !int.TryParse(first, out size) || size &lt; 1 || size &gt; 500;
+        }">
+        <return-response>
+          <set-status code="400" reason="Bad Request" />
+          <set-header name="Content-Type" exists-action="override">
+            <value>application/json</value>
+          </set-header>
+          <set-body>{"error":"$first must be an integer from 1 to 500."}</set-body>
+        </return-response>
+      </when>
+    </choose>
+    <!-- 4. Fair use per client application. -->
+    <rate-limit-by-key calls="120"
+                       renewal-period="60"
+                       counter-key="@(((Jwt)context.Variables[&quot;token&quot;]).Claims.GetValueOrDefault(&quot;azp&quot;, &quot;unknown&quot;))" />
+  </inbound>
+  <backend>
+    <base />
+  </backend>
+  <outbound>
+    <base />
+    <set-header name="Cache-Control" exists-action="override">
+      <value>private, no-store</value>
+    </set-header>
+  </outbound>
+  <on-error>
+    <base />
+    <set-header name="Cache-Control" exists-action="override">
+      <value>private, no-store</value>
+    </set-header>
+  </on-error>
+</policies>
